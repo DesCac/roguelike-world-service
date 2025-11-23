@@ -1,0 +1,40 @@
+# Development Dockerfile для World Service (Go)
+
+FROM golang:1.21-alpine
+
+# Install dependencies
+RUN apk add --no-cache git protoc protobuf-dev postgresql-client
+
+# Install protoc-gen-go
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Install grpc_health_probe
+RUN GRPC_HEALTH_PROBE_VERSION=v0.4.24 && \
+    wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
+    chmod +x /bin/grpc_health_probe
+
+# Set work directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy application code
+COPY . .
+
+# Build
+RUN go build -o world-service main.go
+
+# Expose gRPC port
+EXPOSE 50053
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+  CMD grpc_health_probe -addr=:50053 || exit 1
+
+# Run service
+CMD ["./world-service"]
